@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Disjoint force directed graph for Singapore COVID-19 cases</title>
+  <style>
+    html,
+    body {
+      margin: 0;
+      padding: 0;
+    }
+
+    div.tooltip {
+      color: white;
+      position: absolute;
+      text-align: center;
+      padding: 6px;
+      border-radius: 8px;
+      font-size: 14px;
+      font-family: sans-serif;
+      line-height: 18px;
+      background: rgba(0, 0, 0, .8);
+      border: 2px solid #232323;
+      pointer-events: none;
+    }
+
+    h1 {
+      margin: 20px auto;
+      text-align: center;
+    }
+
+    #chart {
+      border: 1px solid #2b88ff;
+    }
+  </style>
+</head>
+<body>
+<h1>Singapore COVID-19 cases</h1>
+<div id="chart" style="margin: 0 auto; width: 960px; height: 600px;"></div>
+
+<script src="https://d3js.org/d3.v5.min.js"></script>
+<script>
+  if (!('fetch' in window)) {
+    console.log('Fetch API not found, try including the polyfill');
+  }
+
+  // Thanks for the data!
+  fetch('https://sgwuhan.xose.net/api/')
+    .then(response => {
+      if (!response.ok) {
+        throw Error(response.statusText);
+      }
+
+      return response.json();
+    })
+    .then(json => {
+      const rawData = json.data;
+
+      const prepareData = data => {
+        // somehow there is some invalid data, apply patch here to make it correct.
+        const patchCaseNo = (i, caseNo) => {
+          if (i === 14 && caseNo === '#13') { return '#13.1'; }
+          if (i === 15 && caseNo === '#13') { return '#13.2'; }
+          return caseNo;
+        }
+
+        const nodes = data.map((d, i) => {
+          if (d.caseNo) {
+            return {
+              ...d,
+              id: patchCaseNo(i, d.caseNo),
+              group: d.citizenship,
+              radius: 10,
+            };
+          }
+
+          if (d.location) {
+            return {
+              ...d,
+              id: d.location,
+              group: 'location',
+              radius: 7,
+            };
+          }
+
+        }).filter(a => a);
+
+        const links = data.reduce((accumulate, current) => {
+          if (current.caseNo || !current.location || !current.relatedCaseNo) {
+            return accumulate;
+          }
+
+          const relatedCasesNoList = current.relatedCaseNo.split(',').map(a => a.trim()).filter(a => a[0] === '#');
+
+          const relatedLinks = relatedCasesNoList.map(caseNo => {
+            return {
+              source: current.location,
+              target: caseNo,
+              value: 4,
+            };
+          }).filter(a => a);
+
+          return accumulate.concat(relatedLinks)
+
+        }, []);
+
+        return {
+          nodes,
+          links,
+        };
+      }
+
+      const processedData = prepareData(rawData);
+
+      const height = 600;
+      const width = 960;
+
+      // Define the div for the tooltip
+      const tooltip = d3
+        .select('body')
+        .append('div')
+        .attr('class', 'tooltip')
+        .style('opacity', 0);
+
+      const color = (function () {
+        const scale = d3.scaleOrdinal(d3.schemeCategory10);
+        return d => scale(d.group);
+      })();
+
+      const drag = simulation => {
+
+        function dragstarted(d) {
+          if (!d3.event.active) simulation.alphaTarget(0.3).restart();
+          d.fx = d.x;
+          d.fy = d.y;
+        }
+
+        function dragged(d) {
+          d.fx = d3.event.x;
+          d.fy = d3.event.y;
+        }
+
+        function dragended(d) {
+          if (!d3.event.active) simulation.alphaTarget(0);
+          d.fx = null;
+          d.fy = null;
+        }
+
+        return d3.drag()
+          .on("start", dragstarted)
+          .on("drag", dragged)
+          .on("end", dragended);
+      }
+
+      const chart = (function() {
+        const { links, nodes } = processedData;
+
+        const simulation = d3.forceSimulation(nodes)
+          .force("link", d3.forceLink(links).id(d => d.id))
+          .force("charge", d3.forceManyBody())
+          .force("x", d3.forceX())
+          .force("y", d3.forceY());
+
+        const svg = d3.create("svg")
+          .attr("viewBox", [-width / 2, -height / 2, width, height]);
+          // .attr("viewBox", [0, 0, width, height]);
+
+        const link = svg.append("g")
+          .attr("stroke", "#999")
+          .attr("stroke-opacity", 0.6)
+          .selectAll("line")
+          .data(links)
+          .join("line")
+          .attr("stroke-width", d => Math.sqrt(d.value));
+
+        const renderTooltipContent = ({ caseNo, location, gender, age, citizenship, confirmDate }) => {
+          const content = [
+            caseNo ? `case no.: ${caseNo}` : '',
+            location ? `${location}` : '',
+            gender ? `gender: ${gender}`: '',
+            age ? `age: ${age}`: '',
+            citizenship ? `citizenship: ${citizenship}`: '',
+            confirmDate ? `confirmed date: ${confirmDate}` : '',
+          ];
+
+          return content.filter(a => a).join('<br>');
+        };
+
+        const node = svg.append("g")
+          .attr("stroke", "#fff")
+          .attr("stroke-width", 1.5)
+          .selectAll("circle")
+          .data(nodes)
+          .join("circle")
+          .attr("r", d => d.radius)
+          .attr("fill", color)
+          .on('mouseover', d => {
+            tooltip
+              .transition()
+              .duration(200)
+              .style('opacity', 0.9);
+            tooltip
+              .html(renderTooltipContent(d))
+              .style('left', d3.event.pageX + 'px')
+              .style('top', d3.event.pageY - 28 + 'px');
+          })
+          .on('mouseout', () => {
+            tooltip
+              .transition()
+              .duration(500)
+              .style('opacity', 0);
+          })
+          .call(drag(simulation));
+
+        // node.append("title")
+        //   .text(d => d.id)
+
+        simulation.on("tick", () => {
+          link
+            .attr("x1", d => d.source.x)
+            .attr("y1", d => d.source.y)
+            .attr("x2", d => d.target.x)
+            .attr("y2", d => d.target.y);
+
+          node
+            .attr("cx", d => d.x)
+            .attr("cy", d => d.y);
+        });
+
+        //invalidation.then(() => simulation.stop());
+
+        return svg.node();
+      })();
+
+      d3.select('#chart').append(() => chart)
+    })
+    .catch(error => {
+      console.log('Error:' , error );
+    })
+</script>
+</body>
+</html>
