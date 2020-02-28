@@ -103,7 +103,10 @@
             return accumulate;
           }
 
-          const relatedCasesNoList = current.relatedCaseNo.split(',').map(a => a.trim()).filter(a => a[0] === '#');
+          const relatedCasesNoList = current.relatedCaseNo
+            .split(',')
+            .map(a => a.trim())
+            .filter(a => a[0] === '#');
 
           const relatedLinks = relatedCasesNoList.map(caseNo => {
             return {
@@ -135,7 +138,7 @@
         .attr('class', 'tooltip')
         .style('opacity', 0);
 
-      const color = (function () {
+      const color = (function() {
         const scale = d3.scaleOrdinal(d3.schemeCategory10);
         return d => scale(d.group);
       })();
@@ -143,7 +146,9 @@
       const drag = simulation => {
 
         function dragstarted(d) {
-          if (!d3.event.active) simulation.alphaTarget(0.3).restart();
+          if (!d3.event.active) {
+            simulation.alphaTarget(0.3).restart();
+          }
           d.fx = d.x;
           d.fy = d.y;
         }
@@ -154,7 +159,9 @@
         }
 
         function dragended(d) {
-          if (!d3.event.active) simulation.alphaTarget(0);
+          if (!d3.event.active) {
+            simulation.alphaTarget(0);
+          }
           d.fx = null;
           d.fy = null;
         }
@@ -176,7 +183,7 @@
 
         const svg = d3.create("svg")
           .attr("viewBox", [-width / 2, -height / 2, width, height]);
-          // .attr("viewBox", [0, 0, width, height]);
+        // .attr("viewBox", [0, 0, width, height]);
 
         const link = svg.append("g")
           .attr("stroke", "#999")
@@ -190,9 +197,9 @@
           const content = [
             caseNo ? `case no.: ${caseNo}` : '',
             location ? `${location}` : '',
-            gender ? `gender: ${gender}`: '',
-            age ? `age: ${age}`: '',
-            citizenship ? `citizenship: ${citizenship}`: '',
+            gender ? `gender: ${gender}` : '',
+            age ? `age: ${age}` : '',
+            citizenship ? `citizenship: ${citizenship}` : '',
             confirmDate ? `confirmed date: ${confirmDate}` : '',
           ];
 
@@ -288,7 +295,7 @@
       });
     })
     .catch(error => {
-      console.log('Error:' , error );
+      console.log('Error:', error);
     })
 </script>
 </body>
