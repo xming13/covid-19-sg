@@ -3,6 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <title>Disjoint force directed graph for Singapore COVID-19 cases</title>
+  <link href="https://unpkg.com/tailwindcss@^1.0/dist/tailwind.min.css" rel="stylesheet">
   <style>
     html,
     body {
@@ -28,17 +29,20 @@
       margin: 20px auto;
       text-align: center;
     }
-
-    #chart {
-      border: 1px solid #2b88ff;
-    }
   </style>
 </head>
 <body>
-<h1>Singapore COVID-19 cases</h1>
-<div id="chart" style="margin: 0 auto; width: 960px; height: 600px;"></div>
+<div style="float: left;">
+  <h1>Singapore COVID-19 cases</h1>
+  <div id="chart" style="margin: 0 auto; width: 920px; height: 90vh;"></div>
+</div>
+<div id="location-list" style="height: 98vh; overflow: auto;"></div>
 
 <script src="https://d3js.org/d3.v5.min.js"></script>
+<script
+  src="https://code.jquery.com/jquery-3.4.1.slim.min.js"
+  integrity="sha256-pasqAKBDmFT4eHoN2ndd6lN370kFiGUFyTiUHWhU7k8="
+  crossorigin="anonymous"></script>
 <script>
   if (!('fetch' in window)) {
     console.log('Fetch API not found, try including the polyfill');
@@ -56,6 +60,7 @@
     .then(json => {
       const rawData = json.data;
 
+      const RADIUS_LOCATION_NODE = 7;
       const prepareData = data => {
         // somehow there is some invalid data, apply patch here to make it correct.
         const patchCaseNo = (i, caseNo) => {
@@ -71,18 +76,26 @@
               id: patchCaseNo(i, d.caseNo),
               group: d.citizenship,
               radius: 10,
+              nodeType: 'case',
             };
           }
 
           if (d.location) {
+            const numberRelatedCases = d.relatedCaseNo &&
+              d.relatedCaseNo
+                .split(',')
+                .map(a => a.trim())
+                .filter(a => a[0] === '#').length || 0;
+
             return {
               ...d,
               id: d.location,
               group: 'location',
-              radius: 7,
+              radius: RADIUS_LOCATION_NODE,
+              nodeType: 'location',
+              numberRelatedCases,
             };
           }
-
         }).filter(a => a);
 
         const links = data.reduce((accumulate, current) => {
@@ -194,6 +207,7 @@
           .join("circle")
           .attr("r", d => d.radius)
           .attr("fill", color)
+          .attr("data-id", d => d.id)
           .on('mouseover', d => {
             tooltip
               .transition()
@@ -232,7 +246,46 @@
         return svg.node();
       })();
 
-      d3.select('#chart').append(() => chart)
+      d3.select('#chart').append(() => chart);
+
+      const $locationList = $('#location-list');
+
+      const renderLocationList = (locations) => {
+        const rows = locations.map((location, index) => `
+<tr ${index % 2 === 1 ? 'class="bg-gray-100"' : ''}>
+  <td class="border px-4 py-2">${location.id}</td>
+  <td class="border px-4 py-2">${location.numberRelatedCases}</td>
+</tr>
+`);
+
+        $locationList.html(`
+<table class="table-fixed">
+  <thead>
+    <tr>
+      <th class="px-4 py-2">Location</th>
+      <th class="px-4 py-2">No. of related cases</th>
+    </tr>
+  </thead>
+  ${rows.join('')}
+</table>`);
+      };
+
+      const locations = processedData.nodes
+        .filter(a => a.nodeType === 'location')
+        .sort((a, b) => b.numberRelatedCases - a.numberRelatedCases);
+
+      renderLocationList(locations);
+
+      $locationList.on('mouseout', 'tr', function(el) {
+        d3.selectAll('circle').attr('r', RADIUS_LOCATION_NODE);
+      });
+      $locationList.on('mouseover', 'tr', function(el) {
+        const node = $(this).find('td:first-child')[0];
+        if (node) {
+          const id = node.textContent;
+          d3.select(`[data-id="${id}"]`).attr('r', RADIUS_LOCATION_NODE * 2);
+        }
+      });
     })
     .catch(error => {
       console.log('Error:' , error );
